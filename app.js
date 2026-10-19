@@ -161,6 +161,21 @@ function renderNavigation(role) {
 }
 
 async function initializeDashboard() {
+  const previewRole = new URLSearchParams(location.search).get('preview');
+  if (previewRole === 'student' || previewRole === 'teacher') {
+    const previewChapter = { name: 'Westside First Invention', status: 'forming', schools: { name: 'Westside High School · Houston, TX' } };
+    const previewLessons = [
+      { number: 1, title: 'Welcome to First Invention', unit: 'Unit 1 · Become a Maker' },
+      { number: 2, title: 'Maker Lab Safety and Tools', unit: 'Unit 1 · Become a Maker' },
+      { number: 3, title: 'Structures and Forces', unit: 'Unit 1 · Become a Maker' }
+    ];
+    $('.dashboard-name').textContent = previewRole === 'teacher' ? 'Teacher preview' : 'Student preview';
+    $('.sign-out').textContent = 'Exit preview';
+    $('.sign-out').addEventListener('click', () => location.href = 'hub.html');
+    renderNavigation(previewRole);
+    if (previewRole === 'teacher') return teacherDashboard(previewChapter, false, previewLessons, [], 6);
+    return studentDashboard(previewChapter, false, previewLessons, []);
+  }
   const { data: { session } } = await client.auth.getSession(); if (!session) { location.replace('hub.html'); return; }
   await finishOnboarding();
   const [{ data: profile }, { data: membership }] = await Promise.all([
