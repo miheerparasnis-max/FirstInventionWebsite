@@ -12,9 +12,14 @@ function showStatus(message, type = 'info', element = $('.form-status')) {
 
 async function findSchools(query) {
   if (!query || query.trim().length < 2) return [];
-  const { data, error } = await client.from('schools').select('id,name,city,state').ilike('name', `%${query.trim()}%`).order('name').limit(8);
+  const terms = query.toLowerCase().replace(/high school|high|school|h\.?s\.?/g, ' ').split(/[^a-z0-9]+/).filter((term) => term.length > 1);
+  const seed = terms[0] || query.trim().toLowerCase();
+  const { data, error } = await client.from('schools').select('id,name,city,state,school_type').ilike('name', `%${seed}%`).order('name').limit(60);
   if (error) throw error;
-  return data || [];
+  return (data || []).filter((school) => {
+    const searchable = `${school.name} ${school.city} ${school.state}`.toLowerCase();
+    return terms.every((term) => searchable.includes(term));
+  }).slice(0, 10);
 }
 
 function setSchoolPicker(form) {
@@ -43,8 +48,8 @@ async function finishOnboarding() {
   const { data: membership } = await client.from('chapter_members').select('chapter_id').limit(1);
   if (membership?.length) { localStorage.removeItem('fi_pending_onboarding'); return; }
   const request = pending.mode === 'teacher'
-    ? client.rpc('create_chapter', { selected_school_id: pending.schoolId, chapter_name: pending.chapterName || null })
-    : client.rpc('join_chapter', { chapter_code: pending.joinCode, selected_school_id: pending.schoolId });
+    ? client.rpc('create_chapter', { selected_school_id: pending.schoolId })
+    : client.rpc('join_chapter_by_school', { selected_school_id: pending.schoolId });
   const { error } = await request;
   if (!error) localStorage.removeItem('fi_pending_onboarding');
   else sessionStorage.setItem('fi_onboarding_error', error.message);
@@ -53,6 +58,8 @@ async function finishOnboarding() {
 function initializeHub() {
   const requested = new URLSearchParams(location.search).get('mode') || 'student';
   const form = $('.auth-form'); setSchoolPicker(form);
+  $('.hub-intro p:last-child').textContent = 'A teacher creates the chapter for a school. Students create their own accounts and select that same school. At one confirmed teacher and ten confirmed students, the chapter automatically becomes official.';
+  $('[name="school-search"]', form).placeholder = 'Try “Westside Houston” or your school and city';
   const loginButton = document.createElement('button');
   loginButton.type = 'button'; loginButton.dataset.authMode = 'login'; loginButton.textContent = 'Sign in';
   $('.auth-switch').append(loginButton);
@@ -60,8 +67,8 @@ function initializeHub() {
     document.body.dataset.authMode = mode;
     document.querySelectorAll('[data-auth-mode]').forEach((button) => button.classList.toggle('active', button.dataset.authMode === mode));
     $('.hub-mode-title').textContent = mode === 'teacher' ? 'Start a chapter' : mode === 'login' ? 'Welcome back' : 'Join your chapter';
-    $('.hub-mode-description').textContent = mode === 'teacher' ? 'Create the chapter for your school. After confirming your email, you will receive a join code for students.' : mode === 'login' ? 'Sign in to your First Invention learning hub.' : 'Create your own account, choose your school, and enter the code from your teacher.';
-    $('.chapter-name-field').hidden = mode !== 'teacher'; $('.join-code-field').hidden = mode !== 'student';
+    $('.hub-mode-description').textContent = mode === 'teacher' ? 'Create the First Invention chapter for your school. Students who choose the same school automatically join your class after confirming their email.' : mode === 'login' ? 'Sign in to your First Invention learning hub.' : 'Create your own account, choose your school, and automatically join its First Invention chapter.';
+    $('.chapter-name-field').hidden = true; $('.join-code-field').hidden = true;
     $('.form-grid').hidden = mode === 'login';
     $('[name="school-search"]', form).closest('label').hidden = mode === 'login';
     $('[name="first_name"]', form).required = mode !== 'login';
@@ -82,18 +89,17 @@ function initializeHub() {
       location.href = 'dashboard.html'; return;
     }
     if (!values['school-id']) return showStatus('Choose your school from the search results first.', 'error', status);
-    if (mode === 'student' && !values.join_code.trim()) return showStatus('Enter the chapter code from your teacher.', 'error', status);
     showStatus('Creating your account…', 'info', status);
     const redirect = `${location.origin}${location.pathname.replace('hub.html', 'dashboard.html')}`;
     const { data, error } = await client.auth.signUp({ email: values.email, password: values.password, options: { emailRedirectTo: redirect, data: { first_name: values.first_name, last_name: values.last_name } } });
     if (error) return showStatus(error.message, 'error', status);
-    localStorage.setItem('fi_pending_onboarding', JSON.stringify({ mode, schoolId: values['school-id'], chapterName: values.chapter_name, joinCode: values.join_code }));
+    localStorage.setItem('fi_pending_onboarding', JSON.stringify({ mode, schoolId: values['school-id'] }));
     if (data.session) { await finishOnboarding(); location.href = 'dashboard.html'; }
     else showStatus('Check your email to confirm your account. Return through that link to finish joining your chapter.', 'success', status);
   });
 }
 
-function renderNoChapter() { $('.dashboard-content').innerHTML = '<section class="dashboard-card"><p class="eyebrow">Your account is ready</p><h2>Finish joining a chapter.</h2><p>Use the school and chapter code from your teacher, or start a new chapter as an advisor.</p><a class="button" href="hub.html">Go to chapter setup</a></section>'; }
+function renderNoChapter() { $('.dashboard-content').innerHTML = '<section class="dashboard-card"><p class="eyebrow">Your account is ready</p><h2>Your school chapter is not active yet.</h2><p>Ask a teacher or advisor at your school to create the First Invention chapter first. Once they do, you can sign in and join automatically.</p><a class="button" href="hub.html?mode=teacher">I am a teacher or advisor</a></section>'; }
 
 async function renderChapter(membership) {
   const chapter = membership.chapters, { data: userData } = await client.auth.getUser();
@@ -104,7 +110,7 @@ async function renderChapter(membership) {
   const official = chapter.status === 'official'; let teacherCard = '';
   if (membership.member_role === 'teacher') {
     const { count } = await client.from('chapter_members').select('*', { count: 'exact', head: true }).eq('chapter_id', chapter.id).eq('member_role', 'student');
-    teacherCard = `<article class="dashboard-card"><p class="eyebrow">Teacher controls</p><h2>Invite your class</h2><p>Share this code privately with students at ${escapeHtml(chapter.schools?.name || 'your school')}.</p><div class="join-code">${escapeHtml(chapter.join_code)}</div><p><strong>${count || 0} of 10 students joined</strong> · ${official ? 'Your chapter is official.' : 'Activation happens at 10 confirmed students.'}</p></article>`;
+    teacherCard = `<article class="dashboard-card"><p class="eyebrow">Teacher controls</p><h2>Invite your class</h2><p>Tell students at ${escapeHtml(chapter.schools?.name || 'your school')} to create an account and select this school. They will automatically join your class after confirming their email.</p><p><strong>${count || 0} of 10 students joined</strong> · ${official ? 'Your chapter is official.' : 'Activation happens at 10 confirmed students.'}</p></article>`;
   }
   $('.dashboard-content').innerHTML = `<section class="dashboard-hero"><div><p class="eyebrow">${official ? 'Official chapter' : 'Forming chapter'}</p><h1>${escapeHtml(chapter.name)}</h1><p>${escapeHtml(chapter.schools?.name || '')}</p></div><div class="status-pill ${official ? 'official' : ''}">${official ? 'Chapter activated' : 'Building your class'}</div></section><div class="dashboard-status"></div>${(notes || []).map((note) => `<div class="notice success"><strong>First Invention update</strong><br>${escapeHtml(note.message)}</div>`).join('')}${teacherCard}<section class="dashboard-card"><p class="eyebrow">Your class</p><h2>Lessons and resources</h2><p>${official ? 'Published lessons appear below.' : 'Your class can prepare now. Lesson packages appear here as they are published.'}</p><div class="lesson-list">${(lessons || []).map((lesson) => `<a href="program.html" class="lesson-row"><span>${String(lesson.number).padStart(2, '0')}</span><strong>${escapeHtml(lesson.title)}</strong><small>${escapeHtml(lesson.unit || '')}</small></a>`).join('') || '<p class="quiet">No lesson packages are published yet. Videos, slides, build guides, and exit tickets will appear here as they are completed.</p>'}</div></section><div class="dashboard-grid"><article class="dashboard-card"><p class="eyebrow">Competition pathways</p><h3>Find your next challenge</h3><p>Vetted invention and STEM competition opportunities will appear here.</p><a href="competitions.html">View pathways</a></article><article class="dashboard-card"><p class="eyebrow">Mentor Exchange</p><h3>Get project guidance</h3><p>Mentor matching is being built for founding chapters.</p><a href="advisors.html">Learn about mentorship</a></article></div>`;
 }
