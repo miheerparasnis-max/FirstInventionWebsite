@@ -99,7 +99,36 @@ function initializeHub() {
   });
 }
 
-function renderNoChapter() { $('.dashboard-content').innerHTML = '<section class="dashboard-card"><p class="eyebrow">Your account is ready</p><h2>Your school chapter is not active yet.</h2><p>Ask a teacher or advisor at your school to create the First Invention chapter first. Once they do, you can sign in and join automatically.</p><a class="button" href="hub.html?mode=teacher">I am a teacher or advisor</a></section>'; }
+function renderNoChapter() { $('.dashboard-content').innerHTML = '<section class="empty-state"><div class="empty-icon">⚙</div><p class="eyebrow">Your account is ready</p><h1>Your school chapter is not active yet.</h1><p>Ask a teacher or advisor at your school to create the First Invention chapter. Once they do, sign in again and you will join automatically.</p><a class="button" href="hub.html?mode=teacher">I am a teacher or advisor</a></section>'; }
+
+function lessonRows(lessons) {
+  return (lessons || []).slice(0, 4).map((lesson) => `<a href="program.html" class="module-row"><span class="module-number">${String(lesson.number).padStart(2, '0')}</span><span><strong>${escapeHtml(lesson.title)}</strong><small>${escapeHtml(lesson.unit || 'First Invention curriculum')}</small></span><span class="row-arrow">→</span></a>`).join('') || '<div class="locked-state"><span>🔒</span><div><strong>Your class content is being prepared.</strong><p>Lesson slides, videos, build guides, and quizzes will appear here as your chapter receives them.</p></div></div>';
+}
+
+function shellHeader(chapter, official, label) {
+  return `<section class="course-banner"><div class="course-mark"><span>FI</span></div><div><p>${official ? 'Official First Invention chapter' : 'Forming First Invention chapter'}</p><h1>${escapeHtml(chapter.name)}</h1><span class="course-school">${escapeHtml(chapter.schools?.name || '')}</span></div><div class="course-banner-actions"><span class="chapter-status ${official ? 'official' : ''}">${official ? '● Official chapter' : '● Building chapter'}</span><button class="icon-button" type="button" aria-label="More ${label} options">•••</button></div></section>`;
+}
+
+function studentDashboard(chapter, official, lessons, notes) {
+  $('.dashboard-content').innerHTML = `${shellHeader(chapter, official, 'student')}
+    ${(notes || []).map((note) => `<div class="notice success"><strong>First Invention update</strong><br>${escapeHtml(note.message)}</div>`).join('')}
+    <div class="dashboard-columns">
+      <section class="main-column">
+        <article class="continue-card"><div><p class="eyebrow">Continue learning</p><h2>${lessons?.[0] ? escapeHtml(lessons[0].title) : 'Your first lesson is coming soon'}</h2><p>${lessons?.[0] ? 'Open your current lesson, follow the build activity, and complete the exit ticket.' : 'Your teacher will open the first lesson once your chapter is ready.'}</p><a class="button" href="program.html">${lessons?.[0] ? 'Open lesson' : 'Explore the program'}</a></div><div class="continue-illustration">⚡</div></article>
+        <article class="panel-card"><div class="panel-heading"><div><p class="eyebrow">Course modules</p><h2>Your invention pathway</h2></div><a href="program.html">View all</a></div><div class="module-list">${lessonRows(lessons)}</div></article>
+        <article class="panel-card"><div class="panel-heading"><div><p class="eyebrow">Project space</p><h2>Team invention work</h2></div></div><div class="project-grid"><div><span class="project-icon">✎</span><strong>Design journal</strong><small>Capture sketches, tests, and decisions.</small></div><div><span class="project-icon">⌁</span><strong>Build evidence</strong><small>Organize prototype photos and videos.</small></div><div><span class="project-icon">◉</span><strong>Competition plan</strong><small>Find opportunities that fit your project.</small></div></div></article>
+      </section>
+      <aside class="right-column"><article class="side-card"><p class="eyebrow">Your progress</p><div class="progress-ring"><strong>0%</strong><span>course complete</span></div><p class="quiet">Progress begins when your teacher opens the first lesson.</p></article><article class="side-card"><p class="eyebrow">Coming up</p><h3>Chapter meeting</h3><p>Check with your chapter teacher for the current meeting time and room.</p><a href="program.html">View lesson plan</a></article><article class="side-card accent"><p class="eyebrow">Need guidance?</p><h3>Mentor Exchange</h3><p>Get connected to a professional mentor when your chapter is ready.</p><a href="advisors.html">Explore mentorship →</a></article></aside>
+    </div>`;
+}
+
+async function teacherDashboard(chapter, official, lessons, notes, count) {
+  $('.dashboard-content').innerHTML = `${shellHeader(chapter, official, 'teacher')}
+    ${(notes || []).map((note) => `<div class="notice success"><strong>First Invention update</strong><br>${escapeHtml(note.message)}</div>`).join('')}
+    <div class="teacher-actions"><a class="primary-action" href="program.html"><span>＋</span> Open a lesson</a><a href="program.html">Review curriculum</a><a href="competitions.html">Competition pathways</a><button class="text-button" type="button">Post announcement</button></div>
+    <div class="teacher-stats"><article><span class="stat-icon blue">♟</span><div><strong>${count || 0}<small> / 10</small></strong><span>Confirmed students</span></div></article><article><span class="stat-icon gold">✓</span><div><strong>${official ? 'Official' : 'Forming'}</strong><span>Chapter status</span></div></article><article><span class="stat-icon green">▣</span><div><strong>${lessons?.length || 0}<small> / 30</small></strong><span>Published lessons</span></div></article></div>
+    <div class="dashboard-columns teacher-layout"><section class="main-column"><article class="panel-card"><div class="panel-heading"><div><p class="eyebrow">Classroom</p><h2>Current lesson sequence</h2></div><a href="program.html">Manage lessons</a></div><div class="module-list">${lessonRows(lessons)}</div></article><article class="panel-card"><div class="panel-heading"><div><p class="eyebrow">Chapter communication</p><h2>Announcements</h2></div><button class="text-button" type="button">Create</button></div><div class="announcement-empty"><span>📣</span><div><strong>No announcements yet</strong><p>Use announcements for meeting reminders, build deadlines, and chapter updates.</p></div></div></article></section><aside class="right-column"><article class="side-card"><p class="eyebrow">Chapter activation</p><h3>${official ? 'Your chapter is official' : `${count || 0} of 10 students joined`}</h3><div class="activation-bar"><span style="width:${Math.min(100, ((count || 0) / 10) * 100)}%"></span></div><p>${official ? 'Review the kit-dispatch notification in your chapter updates.' : 'Students create individual accounts and select this school to join automatically.'}</p></article><article class="side-card"><p class="eyebrow">At a glance</p><ul class="teacher-checklist"><li>✓ Adult teacher account confirmed</li><li class="${(count || 0) >= 10 ? 'done' : ''}">${(count || 0) >= 10 ? '✓' : '○'} Ten student accounts confirmed</li><li>○ First lesson opened</li><li>○ Chapter kit reviewed</li></ul></article><article class="side-card accent"><p class="eyebrow">Quick resources</p><a href="program.html">30-lesson curriculum</a><a href="teaching-fellows.html">Teaching Fellow materials</a><a href="competitions.html">Competition calendar</a></article></aside></div>`;
+}
 
 async function renderChapter(membership) {
   const chapter = membership.chapters, { data: userData } = await client.auth.getUser();
@@ -107,12 +136,12 @@ async function renderChapter(membership) {
     client.from('member_notifications').select('message,created_at').eq('user_id', userData.user.id).order('created_at', { ascending: false }).limit(3),
     client.from('lessons').select('number,title,unit').eq('published', true).order('number')
   ]);
-  const official = chapter.status === 'official'; let teacherCard = '';
+  const official = chapter.status === 'official';
   if (membership.member_role === 'teacher') {
     const { count } = await client.from('chapter_members').select('*', { count: 'exact', head: true }).eq('chapter_id', chapter.id).eq('member_role', 'student');
-    teacherCard = `<article class="dashboard-card"><p class="eyebrow">Teacher controls</p><h2>Invite your class</h2><p>Tell students at ${escapeHtml(chapter.schools?.name || 'your school')} to create an account and select this school. They will automatically join your class after confirming their email.</p><p><strong>${count || 0} of 10 students joined</strong> · ${official ? 'Your chapter is official.' : 'Activation happens at 10 confirmed students.'}</p></article>`;
+    return teacherDashboard(chapter, official, lessons, notes, count);
   }
-  $('.dashboard-content').innerHTML = `<section class="dashboard-hero"><div><p class="eyebrow">${official ? 'Official chapter' : 'Forming chapter'}</p><h1>${escapeHtml(chapter.name)}</h1><p>${escapeHtml(chapter.schools?.name || '')}</p></div><div class="status-pill ${official ? 'official' : ''}">${official ? 'Chapter activated' : 'Building your class'}</div></section><div class="dashboard-status"></div>${(notes || []).map((note) => `<div class="notice success"><strong>First Invention update</strong><br>${escapeHtml(note.message)}</div>`).join('')}${teacherCard}<section class="dashboard-card"><p class="eyebrow">Your class</p><h2>Lessons and resources</h2><p>${official ? 'Published lessons appear below.' : 'Your class can prepare now. Lesson packages appear here as they are published.'}</p><div class="lesson-list">${(lessons || []).map((lesson) => `<a href="program.html" class="lesson-row"><span>${String(lesson.number).padStart(2, '0')}</span><strong>${escapeHtml(lesson.title)}</strong><small>${escapeHtml(lesson.unit || '')}</small></a>`).join('') || '<p class="quiet">No lesson packages are published yet. Videos, slides, build guides, and exit tickets will appear here as they are completed.</p>'}</div></section><div class="dashboard-grid"><article class="dashboard-card"><p class="eyebrow">Competition pathways</p><h3>Find your next challenge</h3><p>Vetted invention and STEM competition opportunities will appear here.</p><a href="competitions.html">View pathways</a></article><article class="dashboard-card"><p class="eyebrow">Mentor Exchange</p><h3>Get project guidance</h3><p>Mentor matching is being built for founding chapters.</p><a href="advisors.html">Learn about mentorship</a></article></div>`;
+  studentDashboard(chapter, official, lessons, notes);
 }
 
 async function renderAdmin() {
@@ -120,6 +149,15 @@ async function renderAdmin() {
     client.from('chapters').select('name,status,schools(name)').order('created_at', { ascending: false }), client.from('chapter_notifications').select('message,created_at').order('created_at', { ascending: false }).limit(20)
   ]);
   $('.dashboard-content').innerHTML = `<section class="dashboard-card"><p class="eyebrow">Administrator view</p><h2>Chapter activation queue</h2><p>Official chapters appear here for chapter-kit review.</p><div class="lesson-list">${(chapters || []).map((chapter) => `<div class="lesson-row"><span class="status-dot ${chapter.status}"></span><strong>${escapeHtml(chapter.name)}</strong><small>${escapeHtml(chapter.schools?.name || '')} · ${escapeHtml(chapter.status)}</small></div>`).join('') || '<p class="quiet">No chapters have been created yet.</p>'}</div></section><section class="dashboard-card"><p class="eyebrow">Notifications</p><h2>Activation notices</h2>${(notes || []).map((note) => `<div class="notice"><strong>${escapeHtml(note.message)}</strong><br><small>${new Date(note.created_at).toLocaleString()}</small></div>`).join('') || '<p class="quiet">No activation notices yet.</p>'}</section>`;
+}
+
+function renderNavigation(role) {
+  const sidebar = $('.dashboard-sidebar');
+  if (!sidebar) return;
+  const links = role === 'teacher'
+    ? [['Overview', 'dashboard.html'], ['Lessons', 'program.html'], ['Students', 'dashboard.html#students'], ['Announcements', 'dashboard.html#announcements'], ['Chapter resources', 'teaching-fellows.html'], ['Competition pathways', 'competitions.html']]
+    : [['Home', 'dashboard.html'], ['Modules', 'program.html'], ['My progress', 'dashboard.html#progress'], ['Team invention work', 'dashboard.html#project'], ['Competition pathways', 'competitions.html'], ['Mentor Exchange', 'advisors.html']];
+  sidebar.innerHTML = `<p class="eyebrow">${role === 'teacher' ? 'Teacher course tools' : 'Student learning space'}</p>${links.map(([label, href], index) => `<a class="${index === 0 ? 'active' : ''}" href="${href}">${label}</a>`).join('')}`;
 }
 
 async function initializeDashboard() {
@@ -130,6 +168,7 @@ async function initializeDashboard() {
   ]);
   $('.dashboard-name').textContent = profile?.first_name ? `${profile.first_name}'s Hub` : 'My First Invention Hub';
   $('.sign-out').addEventListener('click', async () => { await client.auth.signOut(); location.replace('hub.html'); });
+  renderNavigation(profile?.role);
   if (profile?.role === 'admin') return renderAdmin(); if (!membership) return renderNoChapter(); return renderChapter(membership);
 }
 
